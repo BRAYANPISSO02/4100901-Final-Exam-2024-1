@@ -21,13 +21,14 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+
 #include <stdio.h>
 
-#include "ssd1306.h"
-#include "ssd1306_fonts.h"
-
-#include "ring_buffer.h"
+#include "led_estatus.h"
 #include "keypad.h"
+#include "ring_buffer.h"
+#include "val_clave.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,15 +52,16 @@ I2C_HandleTypeDef hi2c1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-#define KEYPAD_RB_LEN 4
-uint8_t keypad_data = 0xFF;
-uint8_t keypad_buffer[KEYPAD_RB_LEN];
-ring_buffer_t keypad_rb;
-
-#define USART2_RB_LEN 4
-uint8_t usart2_data = 0xFF;
-uint8_t usart2_buffer[USART2_RB_LEN];
-ring_buffer_t usart2_rb;
+uint8_t var_control = 0;
+uint32_t tiempo_led = 0;
+flag_enum presion_teclado = NO_PRESION;
+uint16_t tecla_presionada;
+uint8_t clave[TAM_CLAVE];
+ring_buffer_t ring_clave;
+uint8_t buffer_pantalla[TAM_CLAVE];
+uint8_t validacion_clave = 30;
+uint8_t pantalla_x = 20;
+uint8_t pantalla_y = 10;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -75,37 +77,21 @@ static void MX_I2C1_Init(void);
 /* USER CODE BEGIN 0 */
 int _write(int file, char *ptr, int len)
 {
+  // to using printf
   HAL_UART_Transmit(&huart2, (uint8_t *)ptr, len, 10);
   return len;
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-	/* Data received in USART2 */
-	if (huart->Instance == USART2) {
-		if (usart2_data >= '0' && usart2_data <= '9') {
-			ring_buffer_write(&usart2_rb, usart2_data);
-			if (ring_buffer_is_full(&keypad_rb) != 0) {
-
-			}
-		}
-		HAL_UART_Receive_IT(&huart2, &usart2_data, 1);
-	}
-}
-
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-	if (GPIO_Pin == B1_Pin) {
-
-		return;
-	}
 	uint8_t key_pressed = keypad_scan(GPIO_Pin);
 	if (key_pressed != 0xFF) {
-		ring_buffer_write(&keypad_rb, keypad_data);
-		if (ring_buffer_is_full(&keypad_rb) != 0) {
-
-		}
+		printf("Se presionó: %c\r\n", key_pressed);
+		tecla_presionada = key_pressed;
+		presion_teclado = PRESION;
+		return;
 	}
+
 }
 /* USER CODE END 0 */
 
@@ -141,24 +127,68 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  ssd1306_Init();
-  ssd1306_Fill(Black);
-  ssd1306_SetCursor(20, 20);
-  ssd1306_WriteString("Welcome!", Font_7x10, White);
-  ssd1306_UpdateScreen();
 
-  HAL_UART_Receive_IT(&huart2, &usart2_data, 1);
+  ring_buffer_init(&ring_clave, clave, TAM_CLAVE);
+  ssd1306_Init();
+ssd1306_Fill(Black);
+ssd1306_SetCursor(30, 30);
+ssd1306_WriteString("Welcome!", Font_7x10, White);
+ssd1306_UpdateScreen();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  printf("Starting\r\n");
+  printf("Starting...\r\n");
   while (1)
   {
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+
+
+	  if(presion_teclado == PRESION && tecla_presionada != '#' && tecla_presionada != '*'){
+		  presion_teclado = NO_PRESION;
+		  ring_buffer_write(&ring_clave, tecla_presionada);
+		  buffer_pantalla[var_control] = tecla_presionada;
+		  var_control ++;
+
+		  ssd1306_Fill(Black);
+		  ssd1306_SetCursor(pantalla_x, pantalla_y);
+		  ssd1306_WriteString(&buffer_pantalla, Font_7x10, White);
+		  ssd1306_UpdateScreen();
+
+	  } else if(presion_teclado == PRESION && tecla_presionada == '*'){
+		  presion_teclado = NO_PRESION;
+		  ring_buffer_reset(&ring_clave);
+		  for(uint8_t i = 0; i <= var_control; i++ ){
+			  buffer_pantalla[i] = 0;
+		  }
+//		  memset(&buffer_pantalla, 0, TAM_CLAVE);
+		  var_control = 0;
+
+		  ssd1306_Fill(Black);
+		  ssd1306_UpdateScreen();
+
+	  } else if(presion_teclado == PRESION && tecla_presionada == '#'){
+		  presion_teclado = NO_PRESION;
+		  validacion_clave = validar_clave(&ring_clave);
+		  ring_buffer_reset(&ring_clave);
+		  printf("Validacion: %d\r\n", validacion_clave);
+
+	  }
+
+
+	  //Creamos los condicionales para cuando se presione el numeral, encienda 3000 ms el led (diferentes Frec.)
+	  if(tecla_presionada == '#'){
+		  tiempo_led = HAL_GetTick() + 3000;
+		  tecla_presionada = 0xFF;
+	  }
+	  if( HAL_GetTick() < tiempo_led){
+		  estatus_hz(validacion_clave); //Utilizamos la función estatus_hz de la librería "led_estatus"
+	  }else{  	  	  	  	 //que sirve para indicar la frencuencia de encendido del led.
+		  HAL_GPIO_WritePin(SYSTEM_LED_GPIO_Port, SYSTEM_LED_Pin, 1);
+	  }
+	  }
   /* USER CODE END 3 */
 }
 
@@ -181,13 +211,14 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
-  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.MSIState = RCC_MSI_ON;
+  RCC_OscInitStruct.MSICalibrationValue = 0;
+  RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_MSI;
   RCC_OscInitStruct.PLL.PLLM = 1;
-  RCC_OscInitStruct.PLL.PLLN = 10;
+  RCC_OscInitStruct.PLL.PLLN = 40;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV7;
   RCC_OscInitStruct.PLL.PLLQ = RCC_PLLQ_DIV2;
   RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV2;
@@ -227,7 +258,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x10909CEC;
+  hi2c1.Init.Timing = 0x10D19CE4;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -275,7 +306,7 @@ static void MX_USART2_UART_Init(void)
 
   /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
-  huart2.Init.BaudRate = 115200;
+  huart2.Init.BaudRate = 256000;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
@@ -306,56 +337,28 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOC_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, SYSTEM_LED_Pin|ROW_1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(ROW_4_GPIO_Port, ROW_4_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOB, ROW_2_Pin|ROW_4_Pin|ROW_3_Pin, GPIO_PIN_SET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(ROW_1_GPIO_Port, ROW_1_Pin, GPIO_PIN_SET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, ROW_3_Pin|ROW_2_Pin, GPIO_PIN_SET);
-
-  /*Configure GPIO pin : B1_Pin */
-  GPIO_InitStruct.Pin = B1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : LD2_Pin */
-  GPIO_InitStruct.Pin = LD2_Pin;
+  /*Configure GPIO pins : SYSTEM_LED_Pin ROW_1_Pin */
+  GPIO_InitStruct.Pin = SYSTEM_LED_Pin|ROW_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : ROW_4_Pin */
-  GPIO_InitStruct.Pin = ROW_4_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(ROW_4_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : ROW_1_Pin */
-  GPIO_InitStruct.Pin = ROW_1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(ROW_1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : ROW_3_Pin ROW_2_Pin */
-  GPIO_InitStruct.Pin = ROW_3_Pin|ROW_2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : COL_1_Pin */
+  GPIO_InitStruct.Pin = COL_1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(COL_1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : COL_4_Pin */
   GPIO_InitStruct.Pin = COL_4_Pin;
@@ -363,19 +366,20 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(COL_4_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : COL_3_Pin COL_1_Pin COL_2_Pin */
-  GPIO_InitStruct.Pin = COL_3_Pin|COL_1_Pin|COL_2_Pin;
+  /*Configure GPIO pins : COL_2_Pin COL_3_Pin */
+  GPIO_InitStruct.Pin = COL_2_Pin|COL_3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : ROW_2_Pin ROW_4_Pin ROW_3_Pin */
+  GPIO_InitStruct.Pin = ROW_2_Pin|ROW_4_Pin|ROW_3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
-  HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
-
-  HAL_NVIC_SetPriority(EXTI4_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(EXTI4_IRQn);
-
   HAL_NVIC_SetPriority(EXTI9_5_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 

@@ -52,16 +52,25 @@ I2C_HandleTypeDef hi2c1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
+uint8_t tamano_aritmetica = 0;
+uint8_t valor_hexadecimal_0 = 0;
+uint8_t valor_hexadecimal_1 = 0;
+uint8_t valor_hexadecimal_2 = 0;
+uint8_t valor_hexadecimal_3 = 0;
+uint8_t valor_hexadecimal = 0;
+
 uint8_t var_control = 0;
 uint32_t tiempo_led = 0;
 flag_enum presion_teclado = NO_PRESION;
 uint16_t tecla_presionada;
 uint8_t clave[TAM_CLAVE];
 ring_buffer_t ring_clave;
+ring_buffer_t ring_aritmetica;
 uint8_t buffer_pantalla[TAM_CLAVE];
 uint8_t validacion_clave = 30;
 uint8_t pantalla_x = 20;
 uint8_t pantalla_y = 10;
+uint8_t ultimos_digitos[4];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -85,7 +94,7 @@ int _write(int file, char *ptr, int len)
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
 	uint8_t key_pressed = keypad_scan(GPIO_Pin);
-	if (key_pressed != 0xFF) {
+	if (key_pressed != 0xFF) { //Aquí evitamos el rebote y modificamos las variables necesarias
 		printf("Se presionó: %c\r\n", key_pressed);
 		tecla_presionada = key_pressed;
 		presion_teclado = PRESION;
@@ -127,13 +136,13 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-
-  ring_buffer_init(&ring_clave, clave, TAM_CLAVE);
-  ssd1306_Init();
-ssd1306_Fill(Black);
-ssd1306_SetCursor(30, 30);
-ssd1306_WriteString("Welcome!", Font_7x10, White);
-ssd1306_UpdateScreen();
+//
+//  ring_buffer_init(&ring_clave, clave, TAM_CLAVE);
+//  ssd1306_Init();
+//ssd1306_Fill(Black);
+//ssd1306_SetCursor(30, 30);
+//ssd1306_WriteString("Welcome!", Font_7x10, White);
+//ssd1306_UpdateScreen();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -145,35 +154,45 @@ ssd1306_UpdateScreen();
 
     /* USER CODE BEGIN 3 */
 
-
-	  if(presion_teclado == PRESION && tecla_presionada != '#' && tecla_presionada != '*'){
+//Vamos a realizar el condicional para que el teclado reciba hasta 4 digitos
+	  if(presion_teclado == PRESION && tecla_presionada != '#' && tecla_presionada != '*' && tecla_presionada != 'A' && tecla_presionada != 'B'&& tecla_presionada != 'C'&& tecla_presionada != 'D' ){
 		  presion_teclado = NO_PRESION;
-		  ring_buffer_write(&ring_clave, tecla_presionada);
-		  buffer_pantalla[var_control] = tecla_presionada;
-		  var_control ++;
+		  ring_buffer_write(&ring_aritmetica, tecla_presionada);
+		  tamano_aritmetica = ring_buffer_size(&ring_aritmetica);
 
-		  ssd1306_Fill(Black);
-		  ssd1306_SetCursor(pantalla_x, pantalla_y);
-		  ssd1306_WriteString(&buffer_pantalla, Font_7x10, White);
-		  ssd1306_UpdateScreen();
+		  for(uint8_t i = 0; i < tamano_aritmetica ; i++){
+			  ultimo_digito[i] = tecla_presionada;
+		  }
+		  valor_hexadecimal_0 = ultimo_digito[0] * 1000 ;
+		  valor_hexadecimal_1 = ultimo_digito[1] * 100 ;
+		  valor_hexadecimal_2 = ultimo_digito[2] * 10 ;
+		  valor_hexadecimal_3 = ultimo_digito[3] * 1 ;
+		  valor_hexadecimal = valor_hexadecimal_0 + valor_hexadecimal_1 + valor_hexadecimal_2 + valor_hexadecimal_3;
+//		  buffer_pantalla[var_control] = tecla_presionada;
+//		  var_control ++;
+
+//		  ssd1306_Fill(Black);
+//		  ssd1306_SetCursor(pantalla_x, pantalla_y);
+//		  ssd1306_WriteString(&buffer_pantalla, Font_7x10, White);
+//		  ssd1306_UpdateScreen();
 
 	  } else if(presion_teclado == PRESION && tecla_presionada == '*'){
 		  presion_teclado = NO_PRESION;
-		  ring_buffer_reset(&ring_clave);
-		  for(uint8_t i = 0; i <= var_control; i++ ){
-			  buffer_pantalla[i] = 0;
-		  }
+		  ring_buffer_reset(&ring_aritmetica);
+//		  for(uint8_t i = 0; i <= var_control; i++ ){
+//			  buffer_pantalla[i] = 0;
+//		  }
 //		  memset(&buffer_pantalla, 0, TAM_CLAVE);
-		  var_control = 0;
+//		  var_control = 0;
+//
+//		  ssd1306_Fill(Black);
+//		  ssd1306_UpdateScreen();
 
-		  ssd1306_Fill(Black);
-		  ssd1306_UpdateScreen();
-
-	  } else if(presion_teclado == PRESION && tecla_presionada == '#'){
-		  presion_teclado = NO_PRESION;
-		  validacion_clave = validar_clave(&ring_clave);
-		  ring_buffer_reset(&ring_clave);
-		  printf("Validacion: %d\r\n", validacion_clave);
+	  } else if(presion_teclado == PRESION && tecla_presionada == '#'){ //Vamos a utilizar la tecla "#" para indicar
+		  presion_teclado = NO_PRESION;									//que se envíe los datos
+//		  validacion_clave = validar_clave(&ring_aritmetica);
+//		  ring_buffer_reset(&ring_clave);
+//		  printf("Validacion: %d\r\n", validacion_clave);
 
 	  }
 

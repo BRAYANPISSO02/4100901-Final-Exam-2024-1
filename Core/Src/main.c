@@ -96,6 +96,7 @@ void reset_uart_buffer(void) {
     printf("Buffer UART reseteado\r\n");
 }
 
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -157,7 +158,13 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+//  if (resultado_suma % 2 == 0) {
+//      HAL_GPIO_WritePin(SYSTEM_LED_GPIO_Port, SYSTEM_LED_Pin, GPIO_PIN_RESET);  // Encender LED
+//  } else {
+//      HAL_GPIO_WritePin(SYSTEM_LED_GPIO_Port, SYSTEM_LED_Pin, GPIO_PIN_SET);  // Apagar LED
+//  }
 //
+  //
 //  ring_buffer_init(&ring_clave, clave, TAM_CLAVE);
 //  ssd1306_Init();
 //ssd1306_Fill(Black);
@@ -237,6 +244,26 @@ int main(void)
 		  presion_boton = 0;
 		  printf("Se presionó: %d\r\n", resultado_suma);
 	  }
+
+	         // Chequeo de paridad y control del LED
+	         if (resultado_suma % 2 == 0) {
+	             HAL_GPIO_WritePin(SYSTEM_LED_GPIO_Port, SYSTEM_LED_Pin, GPIO_PIN_RESET);  // Encender LED
+	         } else {
+	             HAL_GPIO_WritePin(SYSTEM_LED_GPIO_Port, SYSTEM_LED_Pin, GPIO_PIN_SET);  // Apagar LED
+	         }
+	     }
+
+	     //Condicionales para cuando se presione el numeral, encienda 3000 ms el led (diferentes Frec.)
+//	     if (tecla_presionada == '#'){
+//	         tiempo_led = HAL_GetTick() + 3000;
+//	         tecla_presionada = 0xFF;
+//	     }
+//	     if (HAL_GetTick() < tiempo_led){
+//	         estatus_hz(validacion_clave); //Utilizamos la función estatus_hz de la librería "led_estatus"
+//	     } else {  	  	  	  	  	 //que sirve para indicar la frencuencia de encendido del led.
+//	         HAL_GPIO_WritePin(SYSTEM_LED_GPIO_Port, SYSTEM_LED_Pin, 1);
+//	     }
+	 }
 
   }
 
